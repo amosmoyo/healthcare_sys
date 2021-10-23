@@ -1,4 +1,4 @@
-from django.db import models
+"""from django.db import models
 from django.contrib.auth.models import (
     BaseUserManager, AbstractBaseUser, PermissionsMixin
 )
@@ -18,7 +18,7 @@ from django.utils import timezone
 # from datetime import datetime, timedelta
 
 # Create your models here.
-"""class MyUserManager(UserManager):
+class MyUserManager(UserManager):
   def _create_user(self, username, email, password, **extra_fields):
           
           #Create and save a user with the given username, email, and password.
@@ -107,18 +107,16 @@ class User(AbstractBaseUser, PermissionsMixin, TrackModel):
     token = jwt.encode({'username':self.username, 'email':self.email, 'exp':datetime.utcnow() + timedelta(hours=24)}, settings.SECRET_KEY, algorithm='HS256')
 
     return token
-"""
+
 class UserManager(BaseUserManager):
     def create_user(self, username, email, is_staff, is_superuser, password, **extra_fields):
-        """
-        Creates and saves a User with the given email and password.
-        """
         if not email:
             raise ValueError('Users must have an email address')
 
         now = timezone.now()  
         user = self.model(
             email=self.normalize_email(email),
+            username=username,
             is_staff=is_staff, 
             is_active=True,
             is_superuser=is_superuser, 
@@ -133,9 +131,6 @@ class UserManager(BaseUserManager):
         return user
 
     def create_staffuser(self, email, password, **extra_fields):
-        """
-        Creates and saves a staff user with the given email and password.
-        """
         user = self.create_user(
             email,
             password,
@@ -149,9 +144,6 @@ class UserManager(BaseUserManager):
         return user
 
     def create_superuser(self, email, password, **extra_fields):
-        """
-        Creates and saves a superuser with the given email and password.
-        """
         user = self.create_user(
             email,
             password,
@@ -175,7 +167,7 @@ class User(AbstractBaseUser):
         unique=True,
     )
 
-    name = models.CharField(max_length=254, null=True, blank=True)
+    username = models.CharField(max_length=254, null=True, blank=True),
     last_login = models.DateTimeField(null=True, blank=True)
     date_joined = models.DateTimeField(auto_now_add=True, null=True)
 
@@ -188,7 +180,7 @@ class User(AbstractBaseUser):
     oobjects = UserManager()
 
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['password'] # Email & Password are required by default.
+    REQUIRED_FIELDS = ['password', 'username'] # Email & Password are required by default.
 
     def get_full_name(self):
         # The user is identified by their email address
@@ -220,3 +212,65 @@ class User(AbstractBaseUser):
     def is_admin(self):
         "Is the user a admin member?"
         return self.admin
+"""
+
+
+from django.db import models
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
+
+
+class CustomAccountManager(BaseUserManager):
+
+    def create_superuser(self, email, username, first_name, password, **other_fields):
+
+        other_fields.setdefault('is_staff', True)
+        other_fields.setdefault('is_superuser', True)
+        other_fields.setdefault('is_active', True)
+
+        if other_fields.get('is_staff') is not True:
+            raise ValueError(
+                'Superuser must be assigned to is_staff=True.')
+        if other_fields.get('is_superuser') is not True:
+            raise ValueError(
+                'Superuser must be assigned to is_superuser=True.')
+
+        return self.create_user(email, username, first_name, password, **other_fields)
+
+    def create_user(self, email, username, first_name, password, **other_fields):
+
+        if not email:
+            raise ValueError(_('You must provide an email address'))
+
+        email = self.normalize_email(email)
+        user = self.model(email=email, username=username,
+                          first_name=first_name, **other_fields)
+        user.set_password(password)
+        user.save()
+        return user
+
+
+class User(AbstractBaseUser, PermissionsMixin):
+
+    USER_TYPE_CHOICES = ((1, 'Patient'),
+                     (2, 'Doctor'),)
+
+    email = models.EmailField(_('email address'), unique=True)
+    username = models.CharField(max_length=150, unique=True)
+    first_name = models.CharField(max_length=150, blank=True)
+    start_date = models.DateTimeField(default=timezone.now)
+    role = models.PositiveSmallIntegerField(choices=USER_TYPE_CHOICES, null=True, blank=True)
+    about = models.TextField(_(
+        'about'), max_length=500, blank=True)
+    is_staff = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    is_superuser = models.BooleanField(default=False)
+
+    objects = CustomAccountManager()
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['username', 'first_name']
+
+    def __str__(self):
+        return self.username
